@@ -1,0 +1,495 @@
+<!doctype><html><head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title>Odyssey.js Slides</title>
+  <meta name="description" content="">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="icon" type="image/x-icon" href="http://cartodb.github.io/odyssey.js/sandbox/favicon.png">
+  <link rel="icon" type="image/png" href="http://cartodb.github.io/odyssey.js/sandbox/favicon.png">
+  <link href='http://fonts.googleapis.com/css?family=Lato' rel='stylesheet' type='text/css'>
+
+  <link rel="stylesheet" href="http://cartodb-libs.global.ssl.fastly.net/cartodb.js/v3/themes/css/cartodb.css">
+  <link rel="stylesheet" href="http://cartodb.github.io/odyssey.js/sandbox/css/slides.css">
+  
+  <script src="http://cartodb.github.io/odyssey.js/vendor/modernizr-2.6.2.min.js"></script>
+  <style>
+  #slides_container {
+    background-color: rgba(233,66,44,0.8) !important;
+  }
+ html * {
+    font-family: 'Lato', sans-serif !important;
+  }
+
+  h1 {
+    color:white !important;
+  }
+
+  p {
+    color:white !important;
+  }
+
+  #map {
+    float:left !important;
+  }
+  #photo {
+   
+    z-index:10;
+    position:absolute;
+    left: 1050px;
+    top:100px;
+  }
+
+
+
+  </style>
+</head>
+<body>
+ <div id="map" style="width: 100%; height: 100%;"></div>
+   
+
+
+  <div id="slides_container" style="display:block;">
+    <div id="dots"></div>
+
+    <div id="slides"></div>
+
+    <ul id="navButtons">
+      <li><a class="prev"></a></li>
+      <li><a class="next"></a></li>
+    </ul>
+  </div>
+  <div id="photo">
+    <img src="http://www.lacksfamily.net/images/image359.jpg" width="200px" height="400px" >
+  </div> 
+
+  <div id="credits">
+    <span class="title" id="title">The Immortal Geography of Henrietta Lacks</span>
+    <span class="author"><strong id="author">By Hayley Richardson using</strong> <a href="http://cartodb.github.io/odyssey.js/">Odyssey.js</a><span>
+  </span></span></div>
+
+  <script src="http://cartodb-libs.global.ssl.fastly.net/cartodb.js/v3/cartodb.js"></script>
+  <script src="http://cartodb.github.io/odyssey.js/dist/odyssey.js" charset="UTF-8"></script>
+
+  <script>
+    var resizePID;
+
+    function clearResize() {
+      clearTimeout(resizePID);
+      resizePID = setTimeout(function() { adjustSlides(); }, 100);
+    }
+
+    if (!window.addEventListener) {
+      window.attachEvent("resize", function load(event) {
+        clearResize();
+      });
+    } else {
+      window.addEventListener("resize", function load(event) {
+        clearResize();
+      });
+    }
+
+    function adjustSlides() {
+      var container = document.getElementById("slides_container"),
+          slide = document.querySelectorAll('.selected_slide')[0];
+
+      if (slide) {
+        if (slide.offsetHeight+169+40+80 >= window.innerHeight) {
+          container.style.bottom = "80px";
+
+          var h = container.offsetHeight;
+
+          slide.style.height = h-169+"px";
+          slide.classList.add("scrolled");
+        } else {
+          container.style.bottom = "auto";
+          container.style.minHeight = "0";
+
+          slide.style.height = "auto";
+          slide.classList.remove("scrolled");
+        }
+      }
+    }
+
+    var resizeAction = O.Action(function() {
+      function imageLoaded() {
+        counter--;
+
+        if (counter === 0) {
+          adjustSlides();
+        }
+      }
+      var images = $('img');
+      var counter = images.length;
+
+      images.each(function() {
+        if (this.complete) {
+          imageLoaded.call( this );
+        } else {
+          $(this).one('load', imageLoaded);
+        }
+      });
+    });
+
+    function click(el) {
+      var element = O.Core.getElement(el);
+      var t = O.Trigger();
+
+      // TODO: clean properly
+      function click() {
+        t.trigger();
+      }
+
+      if (element) element.onclick = click;
+
+      return t;
+    }
+
+    O.Template({
+      init: function() {
+        var seq = O.Triggers.Sequential();
+
+        var baseurl = this.baseurl = 'http://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png';
+        var map = this.map = L.map('map').setView([0, 0.0], 4);
+        var basemap = this.basemap = L.tileLayer(baseurl, {
+          attribution: 'data OSM - map CartoDB'
+        }).addTo(map);
+
+        // enanle keys to move
+        O.Keys().on('map').left().then(seq.prev, seq)
+        O.Keys().on('map').right().then(seq.next, seq)
+
+        click(document.querySelectorAll('.next')).then(seq.next, seq)
+        click(document.querySelectorAll('.prev')).then(seq.prev, seq)
+
+        var slides = O.Actions.Slides('slides');
+        var story = O.Story()
+
+        this.story = story;
+        this.seq = seq;
+        this.slides = slides;
+        this.progress = O.UI.DotProgress('dots').count(0);
+      },
+
+      update: function(actions) {
+        var self = this;
+
+        if (!actions.length) return;
+
+        this.story.clear();
+
+        if (this.baseurl && (this.baseurl !== actions.global.baseurl)) {
+          this.baseurl = actions.global.baseurl || 'http://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png';
+
+          this.basemap.setUrl(this.baseurl);
+        }
+
+        if (this.cartoDBLayer && ("http://"+self.cartoDBLayer.options.user_name+".cartodb.com/api/v2/viz/"+self.cartoDBLayer.options.layer_definition.stat_tag+"/viz.json" !== actions.global.vizjson)) {
+          this.map.removeLayer(this.cartoDBLayer);
+
+          this.cartoDBLayer = null;
+          this.created = false;
+        }
+
+        if (actions.global.vizjson && !this.cartoDBLayer) {
+          if (!this.created) { // sendCode debounce < vis loader
+            cdb.vis.Loader.get(actions.global.vizjson, function(vizjson) {
+              self.map.fitBounds(vizjson.bounds);
+
+              cartodb.createLayer(self.map, vizjson)
+                .done(function(layer) {
+                  self.cartoDBLayer = layer;
+
+                  var sublayer = layer.getSubLayer(0),
+                      layer_name = layer.layers[0].options.layer_name,
+                      filter = actions.global.cartodb_filter ? " WHERE "+actions.global.cartodb_filter : "";
+
+                  sublayer.setSQL("SELECT * FROM "+layer_name+filter)
+
+                  self.map.addLayer(layer);
+
+                  self._resetActions(actions);
+                }).on('error', function(err) {
+                  console.log("some error occurred: " + err);
+                });
+            });
+
+            this.created = true;
+          }
+
+          return;
+        }
+
+        this._resetActions(actions);
+      },
+
+      _resetActions: function(actions) {
+        // update footer title and author
+        var title_ = actions.global.title === undefined ? '' : actions.global.title,
+            author_ = actions.global.author === undefined ? 'Using' : 'By '+actions.global.author+' using';
+
+        document.getElementById('title').innerHTML = title_;
+        document.getElementById('author').innerHTML = author_;
+        document.title = title_ + " | " + author_ +' Odyssey.js';
+
+        var sl = actions;
+
+        document.getElementById('slides').innerHTML = ''
+        this.progress.count(sl.length);
+
+        // create new story
+        for(var i = 0; i < sl.length; ++i) {
+          var slide = sl[i];
+          var tmpl = "<div class='slide' style='diplay:none'>";
+
+          tmpl += slide.html();
+          tmpl += "</div>";
+          document.getElementById('slides').innerHTML += tmpl;
+
+          this.progress.step(i).then(this.seq.step(i), this.seq)
+
+          var actions = O.Parallel(
+            this.slides.activate(i),
+            slide(this),
+            this.progress.activate(i),
+            resizeAction
+          );
+
+          actions.on("finish.app", function() {
+            adjustSlides();
+          });
+
+          this.story.addState(
+            this.seq.step(i),
+            actions
+          )
+        }
+
+        this.story.go(this.seq.current());
+      },
+
+      changeSlide: function(n) {
+        this.seq.current(n);
+      }
+    });
+  </script>
+
+  <script>
+    (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+    (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+    m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+    })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+    ga('create', 'UA-20934186-21', 'cartodb.github.io');
+    ga('send', 'pageview');
+  </script>
+
+  <script type="text/javascript" src="http://fast.fonts.net/jsapi/3af16084-ba56-49ca-b37d-0b49b59e1927.js"></script>
+
+<script id="md_template" type="text/template">```
+-title: "The Immortal Geography of Henrietta Lacks"
+-author: "Hayley Richardson"
+```
+
+#1920
+```
+- center: [37.2667, -79.9333]
+- zoom: 6
+L.marker([37.2667, -79.9333]).actions.addRemove(S.map)
+```
+
+Henrietta is born in Roanoke, VA, but the family soon heads a hundred miles south to the tobacco-farming community of Clover. 
+
+![Clover](http://g-ecx.images-amazon.com/images/G/01/randoEMS/photo_5_lg.jpg)
+
+
+#1951
+```
+- center: [39.2833, -76.6167]
+- zoom: 6
+L.marker([39.2833, -76.6167]).actions.addRemove(S.map)
+L.marker([39.2833, -76.6167]).actions.addRemove(S.map)
+```
+
+After moving to Baltimore with her husband and children, Henrietta is treated at Johns Hopkins for cervical cancer; doctors remove part of her cancerous tumor without her consent. Henrietta dies shortly thereafter. 
+
+Upon inspection, doctors realize that these cells are, astonishingly, immortal, christening them "HeLA".
+
+Her family is told nothing about this. 
+
+
+
+![Hopkins](http://ictr.johnshopkins.edu/wp-content/uploads/2013/05/Henrietta-Lacks-2-thumb-400xauto-7959-Edit-300x300.jpg)
+
+
+
+#1952
+```
+- center: [32.4315, -85.7068]
+- zoom: 6
+L.marker([32.4315, -85.7068]).actions.addRemove(S.map)
+L.marker([32.4315, -85.7068]).actions.addRemove(S.map)
+```
+
+The Tuskegee Institute opens the first "HeLa" factory, supplying Henriettas cells to laboratories and operating as a nonprofit.  
+
+Researchers here use HeLa cells to prove that the Salk Polio vaccine is effective. 
+
+![Tuskegee](http://journeyofthehelacells.weebly.com/uploads/1/5/3/4/15348930/9658197_orig.png?249)
+
+#1953
+```
+- center: [39.7392, -104.9903]
+- zoom: 6
+L.marker([39.7392, -104.9903]).actions.addRemove(S.map)
+L.marker([39.7392, -104.9903]).actions.addRemove(S.map)
+```
+
+HeLa cells are first cloned at the University of Denver Medical Center.
+
+![Denver](http://helabriere.weebly.com/uploads/4/4/5/5/44559527/5700551_orig.jpg)
+
+#1955
+```
+- center: [38.9847, -77.1131]
+- zoom: 6
+L.marker([38.9847, -77.1131]).actions.addRemove(S.map)
+L.marker([38.9847, -77.1131]).actions.addRemove(S.map)
+```
+
+Microbiological Associates begin mass producing HeLa cells for profit, launching the first industrial scale cell production center in Bethesda. 
+
+![Denver](http://helabriere.weebly.com/uploads/4/4/5/5/44559527/5700551_orig.jpg)
+
+
+
+
+
+#1960
+```
+- center: [55.7500, 37.6167]
+- zoom: 5
+L.marker([55.7500, 37.6167]).actions.addRemove(S.map)
+L.marker([55.7500, 37.6167]).actions.addRemove(S.map)
+```
+
+HeLA cells go into space in a Soviet Satellite, aiding the discovery that cancer cells grow faster in space. 
+
+![space](http://apod.nasa.gov/apod/image/0907/apollo11return_nasa_big.jpg)
+
+
+
+#1966
+```
+- center: [38.9873633, -77.1326454]
+- zoom: 6
+L.marker([38.9873633, -77.1326454]).actions.addRemove(S.map)
+L.marker([38.9873633, -77.1326454]).actions.addRemove(S.map)
+```
+
+After revelations that researchers have been injecting cancerous cells into patients without their consent, an NIH investigation leads to the institution of medical review boards and informed consent.  
+
+![NIH](http://dev.diabetesagent.org/wp-content/uploads/nih.gif)
+
+
+
+#1971
+```
+- center: [39.2833, -76.6167]
+- zoom: 6
+L.marker([39.2833, -76.6167]).actions.addRemove(S.map)
+L.marker([39.2833, -76.6167]).actions.addRemove(S.map)
+```
+
+In the medical journal Obstetrics and Gynecology, HeLA is attributed to Henrietta Lacks for the first time. 
+
+It read "even now, Henrietta Lacks, first as Henrietta and then as HeLA has a combined age of 51 years." 
+
+2 years later, her family is shellshocked to finally learn that part of Henrietta has lived on in these cells.  
+
+
+
+#1984
+```
+- center: [39.9500, -75.1667]
+- zoom: 6
+L.marker([39.9500, -75.1667]).actions.addRemove(S.map)
+L.marker([39.9500, -75.1667]).actions.addRemove(S.map)
+```
+
+A German virologist uses HeLa cells to determine that HPV causes cervical cancer; he wins the Nobel Prize for the discovery.  
+
+![harold](https://s-media-cache-ak0.pinimg.com/736x/8d/a0/2d/8da02db6c4f8571179becc38b1e47c9e.jpg)
+
+#1989
+```
+- center: [41.3100, -72.9236]
+- zoom: 6
+L.marker([41.3100, -72.9236]).actions.addRemove(S.map)
+L.marker([41.3100, -72.9236]).actions.addRemove(S.map)
+```
+
+A researcher at Yale discovers that HeLA cells have an enzyme called teleomerase, which keeps cells from dying. This leads to research into teleomerase for cancer treatment. 
+
+![Yale](http://i.kinja-img.com/gawker-media/image/upload/s--CSHJE2Mr--/c_fit,fl_progressive,q_80,w_636/z72lof3uu9i9nluvbxze.jpg)
+
+#1999
+```
+- center: [40.7519432, -73.994105]
+- zoom: 6
+L.marker([40.7519432, -73.994105]).actions.addRemove(S.map)
+L.marker([40.7519432, -73.994105]).actions.addRemove(S.map)
+```
+
+The RAND Corporation publishes a report with a “conservative estimate” that
+more than 307 million tissue samples from more than 178 million people are stored
+in the United States alone. The majority of the samples were taken without consent. 
+
+![tissue](http://ak5.picdn.net/shutterstock/videos/809521/preview/stock-footage-eppendorf-tubes-containing-tissue-samples-for-dna-analysis.jpg)
+
+#2010 
+```
+- center: [41.3833, -2.1833]
+- zoom: 6
+L.marker([41.3833, -2.1833]).actions.addRemove(S.map)
+L.marker([41.3833, -2.1833]).actions.addRemove(S.map)
+```
+
+Scientists at the Instituto de Microelectrónica de Barcelona perform cutting edge cancer research using HeLA cells and nanotechnology. 
+![Barcelona](http://www.nanowerk.com/spotlight/id15292_1.jpg)
+
+
+
+
+
+#2015 
+```
+- center: [39.2833, -76.6167]
+- zoom: 6
+L.marker([39.2833, -76.6167]).actions.addRemove(S.map)
+L.marker([39.2833, -76.6167]).actions.addRemove(S.map)
+```
+
+Henriettas descendents still live in Baltimore. 
+They have never received financial renumeration for the cell line, though an educational foundation was set up with proceeds from Rebecca Skloots explosive bestseller "The Immortal Life of Henrietta Lacks."
+
+The debate about consent regarding human tissue continues.
+
+![family](http://g-ecx.images-amazon.com/images/G/01/randoEMS/photo_10_lg.jpg)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+</script></body></html>
